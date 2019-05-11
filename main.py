@@ -36,7 +36,7 @@ def normalize(x, vmin=0, vmax=1, axis=-1):
     xmax = np.max(x, axis=axis, keepdims=True)
     return vmin + (x-xmin) * ((vmax-vmin) / (xmax-xmin))
 
-def local_maxima(img, wsize=15, no_flat=True, thresh=True):
+def local_maxima(img, wsize=9, no_flat=True, thresh=True):
     # curvature
     #img = np.square(img).sum(axis=-1)
     #img = np.linalg.norm(img, axis=-1)
@@ -210,10 +210,11 @@ def main():
     cam = cv2.VideoCapture(0)
     img = None
     cv2.namedWindow('img', cv2.WINDOW_NORMAL)
-    cv2.namedWindow('dbg', cv2.WINDOW_NORMAL)
+    #cv2.namedWindow('dbg', cv2.WINDOW_NORMAL)
 
     trk  = None
     path = []
+    iter=0
     while True:
         ret, img = cam.read(img)
         if not ret:
@@ -252,7 +253,7 @@ def main():
             for p, c in zip(trk,cols):
                 cv2.circle(img, (p[1], p[0]), 2, c)
 
-            cv2.imshow('dbg', dbg)
+            #cv2.imshow('dbg', dbg)
 
         #plt.hist(kappa.ravel(), bins='auto')
         #plt.pause(0.001)
@@ -270,10 +271,12 @@ def main():
         #        dtype=cv2.CV_8U)
         #viz = np.concatenate( (img, img2), axis=1)
         #viz = kappa - kappa.min(axis=(0,1),keepdims=True)
+        cv2.imwrite('/tmp/frame{:04d}.png'.format(iter), (viz*255).astype(np.uint8) )
         cv2.imshow('img', viz)
         k = cv2.waitKey(1)
         if k in [27, ord('q')]:
             break
+        iter += 1
 
 if __name__ == '__main__':
     main()
