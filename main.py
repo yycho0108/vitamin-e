@@ -190,6 +190,19 @@ def vitatrack(kpt0, kappa, T_A, T_b, lmd=0.001):
 
     return pt1, good
 
+def lktrack(img0, img1, kpt0):
+    lk_params = dict( winSize  = (15, 15),
+            maxLevel = 2,
+            criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+
+    pt0 = kpt0[:, ::-1].astype(np.float32) # (i,j) -> (x,y)
+    pt1, _, _ = cv2.calcOpticalFlowPyrLK(img0, img1, pt0, None, **lk_params)
+    pt0r, _, _ = cv2.calcOpticalFlowPyrLK(img1, img0, pt1, None, **lk_params)
+    d = abs(pt0-pt0r).reshape(-1, 2).max(-1)
+    good = d < 4.0
+    pt1 = pt1[:, ::-1].astype(np.int32)
+    return pt1[good], good
+
 def main():
     db = []
     matcher = Matcher()
@@ -223,6 +236,7 @@ def main():
                 path = trk[None,:]
                 cols = np.random.uniform(0, 255, (len(trk),3))
             trk, good = vitatrack(trk, kappa, T_A, T_b)
+            #trk, good = lktrack(db[-2][0], db[-1][0], trk)
             path = path[:, good]
             cols = cols[good]
             path = np.append(path, trk[None,:], axis=0)
