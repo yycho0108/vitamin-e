@@ -36,7 +36,7 @@ def normalize(x, vmin=0, vmax=1, axis=-1):
     xmax = np.max(x, axis=axis, keepdims=True)
     return vmin + (x-xmin) * ((vmax-vmin) / (xmax-xmin))
 
-def local_maxima(img, wsize=11, no_flat=True):
+def local_maxima(img, wsize=15, no_flat=True, thresh=True):
     # curvature
     #img = np.square(img).sum(axis=-1)
     #img = np.linalg.norm(img, axis=-1)
@@ -51,6 +51,10 @@ def local_maxima(img, wsize=11, no_flat=True):
         e_img = cv2.erode(img, ker)
         flat_msk = (img > e_img)
         msk = np.logical_and(msk, flat_msk)
+
+    if thresh:
+        val_msk = (img > np.percentile(img, 95.0))
+        msk = np.logical_and(msk, val_msk)
 
     idx = np.stack(np.nonzero(msk), axis=-1)
 
@@ -124,7 +128,8 @@ def get_dominant_motion(mdata):
     return A, b
 
 def p_fn(x, sigma=0.1):
-    # really rho, but using p anyway
+    # really should be `rho`, but using p anyway
+    # Geman-McClure Kernel
     xsq = np.square(x)
     ssq = np.square(sigma)
     return xsq / (xsq + ssq)
@@ -132,54 +137,7 @@ def p_fn(x, sigma=0.1):
 def w_fn(x, sigma=0.1):
     return 1.0 - p_fn(x, sigma=sigma)
 
-#@numba.jit#(nopython=True, parallel=True)
-def hill_climb(kappa, pt1, pt1_, F, lmd=0.1):
-    # pt1 = (i, j) current position pair
-    h, w = kappa.shape[:2]
-    
-    msk = []
-    F1  = []
-    pt1_out = []
-
-    for i_p, p in enumerate(pt1):
-        i,j = p
-        best = F[i_p]
-        best_d = None
-        keep = False
-
-        for di in [-1,0,1]:
-            for dj in [-1,0,1]:
-                if di==0 and dj==0:
-                    continue
-                if i+di < 0 or i+di >= h:
-                    continue
-                if j+dj < 0 or j+dj >= w:
-                    continue
-                d_pt = np.linalg.norm(np.float32([i+di, j+dj]) - pt1_[i_p])
-                f1 = kappa[i+di, j+dj] + lmd * w_fn(d_pt)
-                if f1 > best:
-                    best = f1
-                    best_d = (di,dj)
-                    keep = True
-
-        msk.append(keep)
-        if keep:
-            di, dj = best_d
-            pt1_out.append( (i+di, j+dj) )
-            F1.append(best)
-
-    return msk, pt1_out, F1
-
-def hill_climb_vec(kappa, pt1, pt1_, F, lmd=0.1):
-    h, w = kappa.shape[:2]
-
-    msk = []
-    F1  = []
-    pt1_out = []
-
-    best = F
-    msk  = np.zeros(len(pt1))
-
+def hill_climb(kappa, pt1, pt1_, F, lmd):
     kappa_pad = np.pad(kappa, ((1,1),(1,1)),
             mode='constant', constant_values=-np.inf)
 
@@ -224,7 +182,7 @@ def vitatrack(kpt0, kappa, T_A, T_b, lmd=0.001):
 
     while True:
         #break
-        msk, pt1_d, F = hill_climb_vec(kappa, pt1[idx], pt1_[idx], F, lmd=lmd)
+        msk, pt1_d, F = hill_climb(kappa, pt1[idx], pt1_[idx], F, lmd=lmd)
         if np.sum(msk) <= 0:
             break
         idx = idx[msk]
@@ -241,17 +199,19 @@ def main():
     cv2.namedWindow('img', cv2.WINDOW_NORMAL)
     cv2.namedWindow('dbg', cv2.WINDOW_NORMAL)
 
-    trk = None
+    trk  = None
+    path = []
     while True:
         ret, img = cam.read(img)
         if not ret:
             break
-        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-        kappa = curvature(lab * (100.0/255.0/255.0, 1.0/255.0,1.0/255.0))
+        #lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        #kappa = curvature(lab * (100.0/255.0/255.0, 1.0/255.0,1.0/255.0))
+        kappa = curvature(img/255.0)
         #kappa = normalize(np.abs(kappa), axis=(0,1))
         kappa = np.linalg.norm(kappa, axis=-1)
         #cv2.imshow('kappa', normalize(kappa))
-        maxima, idx = local_maxima(normalize(kappa))
+        maxima, idx = local_maxima(kappa)
         #cv2.imshow('maxima', kappa)
         db.append( (img, idx) )
 
@@ -259,10 +219,24 @@ def main():
             mdata, dbg = matcher.match(db[-2], db[-1])
             T_A, T_b = get_dominant_motion(mdata)
             if trk is None:
-                trk = db[-2][1]
+                trk  = db[-2][1]
+                path = trk[None,:]
+                cols = np.random.uniform(0, 255, (len(trk),3))
             trk, good = vitatrack(trk, kappa, T_A, T_b)
-            for p in trk:
-                cv2.circle(img, (p[1], p[0]), 2, (255,0,0))
+            path = path[:, good]
+            cols = cols[good]
+            path = np.append(path, trk[None,:], axis=0)
+
+            tmp = img.copy()
+            for p, c in zip(path.swapaxes(0,1)[...,::-1], cols):
+                cv2.polylines(tmp,
+                        #path.swapaxes(0,1)[...,::-1],
+                        p[None,...],
+                        False, c
+                        )
+            img = cv2.addWeighted(img, 0.75, tmp, 0.25, 0.0)
+            for p, c in zip(trk,cols):
+                cv2.circle(img, (p[1], p[0]), 2, c)
 
             cv2.imshow('dbg', dbg)
 
