@@ -3,6 +3,7 @@ import cv2
 from matplotlib import pyplot as plt
 from scipy.optimize import least_squares
 import numba
+import os
 
 def curvature(img):
     dfun = cv2.Sobel
@@ -110,8 +111,8 @@ class Matcher(object):
 
         if (scale != 1.0):
             # undo scale transform
-            pt0 = pt0 / scale
-            pt1 = pt1 / scale
+            pt0 = np.divide(pt0, scale)
+            pt1 = np.divide(pt1, scale)
 
         return (pt0, pt1, matches), dbg
 
@@ -206,19 +207,23 @@ def lktrack(img0, img1, kpt0):
 def main():
     db = []
     matcher = Matcher()
-
-    cam = cv2.VideoCapture(0)
+    #src = os.path.expanduser('~/Videos/VID_20190327_194904.mp4')
+    src = 1
+    #cam = cv2.VideoCapture(0)
+    cam = cv2.VideoCapture(src)
     img = None
     cv2.namedWindow('img', cv2.WINDOW_NORMAL)
     #cv2.namedWindow('dbg', cv2.WINDOW_NORMAL)
 
     trk  = None
     path = []
-    iter=0
+    iter = 0
+    scale = 1.#/4
     while True:
         ret, img = cam.read(img)
         if not ret:
             break
+        img = cv2.resize(img, None, fx=scale, fy=scale)
         #lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
         #kappa = curvature(lab * (100.0/255.0/255.0, 1.0/255.0,1.0/255.0))
         kappa = curvature(img/255.0)
