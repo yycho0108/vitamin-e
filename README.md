@@ -1,5 +1,8 @@
 # vitamin-e
-unofficial attempt to reproduce results from VITAMIN-E: VIsual Tracking And MappINg with Extremely Dense Feature Points
+
+**NOTE** The code in the repository does not work yet.
+
+Unofficial attempt to reproduce results from VITAMIN-E: VIsual Tracking And MappINg with Extremely Dense Feature Points
 
 ## Tracking
 
